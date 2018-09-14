@@ -1,0 +1,42 @@
+tmp_awards_coaches = LOAD '/tmp/FIT5148/AwardsCoaches.csv' using PigStorage(',');
+awards_coach_raw = FILTER tmp_awards_coaches BY $2 > 0;
+awards_coach = FOREACH awards_coach_raw GENERATE $0 as coachID, $1 as award;
+
+group_by_coach = GROUP awards_coach BY coachID;
+coach_awards_count = FOREACH group_by_coach GENERATE group as coachID, 
+	COUNT(awards_coach.award) as awards_number;
+--coach_awards_count
+--0.coachID, 1.awards_number
+
+group_awards_count = GROUP coach_awards_count ALL;
+max_coach_awards = FOREACH group_awards_count GENERATE MAX(coach_awards_count.awards_number) 
+	AS max_awards_number;
+--max_coach_awards
+--0.max_awards_number;
+
+distinct_max = DISTINCT max_coach_awards;
+--distinct_max
+--0.max_awards_number;
+
+join_distinct_max = JOIN distinct_max BY max_awards_number, coach_awards_count BY awards_number;
+--join_distinct_max
+--0.max_coach_awards, 1.coachID, 2.awards_number
+
+coach_list = FOREACH join_distinct_max GENERATE $1 as coachID, $2 as awards_number;
+--coach_list
+--0.coachID, 1.awards_number
+
+tmp_master = LOAD '/tmp/FIT5148/Master.csv' using PigStorage(',');
+master_raw = FILTER tmp_master BY $1 != 'coachID' AND $1 != '';
+master = FOREACH master_raw GENERATE $1 as coachID, $3 as fname, $4 as lname, $19 as birthYear, 
+	$20 as birthMonth, $21 as birthDay, $22 as birthCountry;
+--master
+--0.coachID, 1.fname, 2.lname, 3.birthYear, 4.birthMonth, 5.birthDay, 6.birthCountry
+
+join_coach_list = JOIN coach_list BY coachID, master BY coachID;
+--0.coachID, 1.awards_number, 2.coachID, 3.fname, 4.lname, 5.birthYear, 6.birthMonth, 
+--7.birthDay, 8.birthCountry
+
+answer = FOREACH join_coach_list GENERATE $3 as fname, $4 as lname, $5 as birthYear, 
+	$6 as birthMonth, $7 as birthDay, $8 as birthCountry, $1 as awards_number;
+DUMP answer;

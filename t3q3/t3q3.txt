@@ -1,0 +1,67 @@
+tmp_coaches = LOAD '/tmp/FIT5148/Coaches.csv' using PigStorage(',');
+coaches_raw = FILTER tmp_coaches BY $1 > 0;
+coaches = FOREACH coaches_raw GENERATE $0 as coachID, $1 as year, $2 as teamID, $7 as wins;
+--coaches
+--0.coachID, 1.year, 2.teamID, 3.wins
+
+tmp_teams = LOAD '/tmp/FIT5148/Teams.csv' using PigStorage(',');
+teams_raw = FILTER tmp_teams BY $0 > 0;
+teams = FOREACH teams_raw GENERATE $2 as teamID, $18 as name;
+distinct_team = DISTINCT teams;
+
+tmp_awards_coaches = LOAD '/tmp/FIT5148/AwardsCoaches.csv' using PigStorage(',');
+awards_coaches_raw = FILTER tmp_awards_coaches BY $0 != 'coachID';
+awards_coaches = FOREACH awards_coaches_raw GENERATE $0 as coachID, $1 as award, $2 as year;
+
+join_coaches = JOIN coaches BY (year, coachID), awards_coaches BY (year, coachID);
+--join_coaches
+--0.coachID, 1.year, 2.teamID, 3.wins, 4.coachID, 5.award, 6.year
+
+coachID_awards_wins = FOREACH join_coaches GENERATE $0 as coachID, $1 as year, $2 as teamID, 
+	$3 as wins, $5 as award;
+--coachID_awards_wins
+--0.coachID, 1.year, 2.teamID, 3.wins, 4.award
+
+group_by_teamID_coachID = GROUP coachID_awards_wins BY (coachID, teamID);
+awards_wins_count = FOREACH group_by_teamID_coachID GENERATE FLATTEN(group) as (coachID, teamID),
+	SUM(coachID_awards_wins.wins) as total_wins, COUNT(coachID_awards_wins.award) as award_number;
+--awards_wins_count
+--0.coachID, 1.teamID, 2.total_wins, 3.award_number
+
+group_by_teamID = GROUP awards_wins_count BY teamID;
+max_awards_per_team = FOREACH group_by_teamID GENERATE group as teamID, 
+	MAX(awards_wins_count.award_number) as max_award_number;
+--max_awards_per_team
+--0.teamID, 1.max_award_number
+
+join_max_awards_per_team = JOIN max_awards_per_team BY (teamID, max_award_number), 
+	awards_wins_count BY (teamID, award_number);
+--join_max_awards_per_team
+--0.teamID, 1.max_award_number, 2.coachID, 3.teamID, 4.total_wins, 5.award_number
+
+team_max_awards_coach = FOREACH join_max_awards_per_team GENERATE $0 as teamID, $2 as coachID, 
+	$5 as award_number, $4 as total_wins;
+--team_max_awards_coach
+--0,teamID, 1.coachID, 2.award_number, 3.total_wins
+
+join_team_max_awards_coach = join team_max_awards_coach BY teamID, distinct_team BY teamID;
+--join_team_max_awards_coach
+--0.teamID, 1.coachID, 2.award_number, 3.total_wins, 4.teamID, 5.name
+team_name = FOREACH join_team_max_awards_coach GENERATE $5 as name, $1 as coachID, 
+	$2 as award_number, $3 as total_wins;
+--team_name
+--0.name, 1.coachID, 2.award_number 3.total_wins
+
+tmp_master = LOAD '/tmp/FIT5148/Master.csv' using PigStorage(',');
+master_raw = FILTER tmp_master BY $1 != 'coachID' AND $1 != '';
+master = FOREACH master_raw GENERATE $1 as coachID, $3 as fname, $4 as lname;
+--master
+--0.coachID, 1.fname, 2.lname
+
+join_team_name = JOIN team_name BY coachID, master BY coachID;
+--join_team_name
+--0.name, 1.coachID, 2.award_number 3.total_wins, 4.coachID, 5.fname, 6.lname;
+
+answer = FOREACH join_team_name GENERATE $0 as name, $5 as fname, $6 as lname, $2 as award_number,
+	$3 as total_wins;
+DUMP answer;

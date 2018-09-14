@@ -1,0 +1,3 @@
+(1970,Phil,Esposito,1942,2,20,Canada,Boston Bruins,BOS,C,16)
+(1971,Phil,Esposito,1942,2,20,Canada,Boston Bruins,BOS,C,16)
+(1983,Michel,Goulet,1960,4,21,Canada,Quebec Nordiques,QUE,L,16)

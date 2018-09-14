@@ -1,0 +1,52 @@
+tmp_master = LOAD '/tmp/FIT5148/Master.csv' using PigStorage(',');
+master_raw = FILTER tmp_master BY $3 == 'Phil' AND $4 == 'Esposito';
+playerID = FOREACH master_raw GENERATE $0 AS playerID;
+--playerID
+--0.playerID
+
+distinct_playerID = DISTINCT playerID;
+
+tmp_awards_players = LOAD '/tmp/FIT5148/AwardsPlayers.csv' using PigStorage(',');
+awards_players_raw = FILTER tmp_awards_players BY $2 > 0;
+awards_players = FOREACH awards_players_raw GENERATE $0 AS playerID, $1 AS award, $2 AS year;
+--awards_players
+--0.playerID, 1.award, 2.year
+
+join_selected_playerID = JOIN distinct_playerID BY playerID, awards_players BY playerID;
+--join_selected_playerID
+--0.playerID, 1.playerID, 2.award 3.year
+
+player_award = FOREACH join_selected_playerID GENERATE $0 AS playerID, $2 AS award, $3 AS year;
+--player_award
+--0.playerID, 1.award, 2.year
+
+tmp_scoring = LOAD '/tmp/FIT5148/Scoring.csv' using PigStorage(',');
+scoring_raw = FILTER tmp_scoring BY $1 > 0;
+player_year_point = FOREACH scoring_raw GENERATE $0 as playerID, $1 as year, $9 as points;
+--player_year_ponit
+--0.playerID, 1.year, 2.points
+
+join_player_award = JOIN player_award BY (playerID, year), player_year_point BY (playerID, year);
+--join_player_award
+--0.playerID, 1.award, 2.year, 3.playerID, 4.year, 5.points
+
+year_award = FOREACH join_player_award GENERATE $1 AS award, $2 AS year;
+--year_award
+--0.award, 1.year
+
+year_points = FOREACH join_player_award GENERATE $2 AS year, $5 as points;
+--year_points
+--0.year, 1.points
+
+group_by_year = GROUP year_points BY (year);
+year_total_points = FOREACH group_by_year GENERATE group as year, SUM(year_points.points) as total_points;
+--year_total_points
+--0.year, 1.total_points
+
+tmp_answer = JOIN year_award BY year, year_total_points BY year;
+--tmp_answer
+--0.award, 1.year, 2.year, 3.total_points
+
+answer = FOREACH tmp_answer GENERATE $0 as award, $1 as year, $3 as total_points;
+
+DUMP answer;

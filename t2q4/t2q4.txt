@@ -1,0 +1,54 @@
+tmp_coaches = LOAD '/tmp/FIT5148/Coaches.csv' using PigStorage(',');
+coaches_raw = FILTER tmp_coaches BY $1 > 0 AND $11 >= 0;
+coaches = FOREACH coaches_raw GENERATE $0 AS coachID, $1 AS year, $11 AS postw;
+--coaches
+--0.coachID, 1.year, 2.postw
+
+lgID_list = FOREACH coaches_raw GENERATE $0 AS coachID, $3 AS lgID;
+distinct_lgID_list = DISTINCT lgID_list;
+--lgID_list
+--0.coachID, 1.lgID
+
+group_by_coachID = GROUP coaches BY coachID;
+wins_postw_sum = FOREACH group_by_coachID GENERATE group AS coachID, 
+	SUM(coaches.postw) AS postw;
+--wins_postw_sum
+--0.coachID, 1.postw
+
+group_wins_postw_sum = GROUP wins_postw_sum ALL;
+highest_postw = FOREACH group_wins_postw_sum GENERATE MAX(wins_postw_sum.postw) as max_postw;
+
+join_highest_postw = JOIN highest_postw BY max_postw, wins_postw_sum BY postw;
+--join_highest_postw
+--0.max_postw, 1.coachID, 2.postw
+highest_postw_coach = FOREACH join_highest_postw GENERATE $1 as coachID, $2 as postw;
+--highest_postw_coach
+--0.coachID, 1.postw
+
+coach_year = FOREACH coaches GENERATE $0 AS coachID, $1 AS year;
+distinct_coach_year = DISTINCT coach_year;
+group_by_coachID = GROUP distinct_coach_year BY coachID;
+year_count = FOREACH group_by_coachID GENERATE group AS coachID, 
+	COUNT(distinct_coach_year.year) AS times;
+--year_count
+--0.coachID, 1.times
+
+--group_lgID = GROUP lgID_list BY coachID;
+--0.coachID, 1.{lgID}
+
+tmp_master = LOAD '/tmp/FIT5148/Master.csv' using PigStorage(',');
+master_raw = FILTER tmp_master BY $1 != 'coachID' AND $1 != '';
+master = FOREACH master_raw GENERATE $1 as coachID, $3 as fname, $4 as lname;
+--master
+--0.coachID, 1.fname, 2.lname
+
+join_tables = JOIN highest_postw_coach BY coachID, year_count BY coachID, distinct_lgID_list BY coachID,
+	master BY coachID;
+--join_tables
+--0.coachID, 1.postw, 2.coachID, 3.times, 4.coachID, 5.lgID,
+--6.coachID, 7.fname, 8.lname
+
+answer = FOREACH join_tables GENERATE $7 as fname, $8 as lname, $5 as lgID, $1 as wins, 
+	$3 as times;
+    
+DUMP answer;

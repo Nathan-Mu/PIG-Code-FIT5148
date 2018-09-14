@@ -1,0 +1,65 @@
+tmp_coaches = LOAD '/tmp/FIT5148/Coaches.csv' using PigStorage(',');
+coaches_raw = FILTER tmp_coaches BY $1 > 0;
+coaches = FOREACH coaches_raw GENERATE $0 AS coachID, $1 AS year, $6 AS games, $7 AS wins, 
+	$8 AS losses, $9 AS ties;
+--coaches
+--0.coachID, 1.year, 2.games, 3.wins, 4.losses, 5.ties
+
+group_by_year_coachID = GROUP coaches BY (coachID, year);
+coach_wins_this_year = FOREACH group_by_year_coachID GENERATE FLATTEN(group) AS (coachID, year),
+	SUM(coaches.wins) AS total_wins;
+--coach_wins_this_year
+--0.coachID, 1.year, 2.wins
+--prevent one coach appears twice or more in one year. eg. from first coach to second coach
+
+wins_number = FOREACH coach_wins_this_year GENERATE $2 AS wins;
+
+distinct_wins_number = DISTINCT wins_number;
+
+group_distinct_wins_number = GROUP distinct_wins_number ALL;
+second_highest_wins = FOREACH group_distinct_wins_number 
+	{order_by_number = ORDER distinct_wins_number BY wins desc;
+     top_two = LIMIT order_by_number 2;
+     re_order_by_number = ORDER top_two BY wins;
+     second = LIMIT re_order_by_number 1;
+     GENERATE FLATTEN(second) AS wins;};
+--second_highest_wins
+--0.wins
+
+join_second_highest_wins = JOIN second_highest_wins BY wins, coaches BY wins;
+--join_second_highest_wins
+--0.wins, 1.coachID, 2.year, 3.games, 4.wins, 5.losses, 6.ties
+
+selected_coach = FOREACH join_second_highest_wins GENERATE $1 AS coachID, $2 AS year, $3 AS games,
+	$0 AS wins, $5 AS losses, $6 AS ties;
+
+tmp_master = LOAD '/tmp/FIT5148/Master.csv' using PigStorage(',');
+master_raw = FILTER tmp_master BY $1 != 'coachID' AND $1 != '';
+master = FOREACH master_raw GENERATE $1 as coachID, $3 as fname, $4 as lname;
+--master
+--0.coachID, 1.fname, 2.lname
+
+join_selected_coach = JOIN selected_coach BY coachID, master BY coachID;
+--join_selected_coach
+--0.coachID, 1.year, 2.games, 3.wins, 4.losses, 5.ties, 6.coachID, 7.fname, 8.lname
+
+task2b = FOREACH join_selected_coach GENERATE $7 as fname, $8 as lname, $1 as year, 
+	$2 as games, $3 as wins, $4 as losses, $5 as ties, $0 as coachID;
+
+tmp_awards_coaches = LOAD '/tmp/FIT5148/AwardsCoaches.csv/' using PigStorage(',');
+awards_coaches_raw = FILTER tmp_awards_coaches BY $2 > 0;
+awards_coaches = FOREACH awards_coaches_raw GENERATE $0 AS coachID;
+
+group_by_year = GROUP awards_coaches BY (coachID);
+awards_count = FOREACH group_by_year GENERATE FLATTEN(group) AS coachID, 
+	COUNT(awards_coaches.coachID) AS awards_number; 
+
+join_task2b = JOIN task2b BY coachID, awards_count BY coachID;
+--join_task2b
+--0.fname, 1.lname, 2.year, 3.games, 4.wins, 5.losses, 6.ties, 7.coachID, 8.coachID, 
+--9.awards_number
+
+answer = FOREACH join_task2b GENERATE $0 AS fname, $1 AS lname, $2 AS year, $3 AS games, 
+	$4 AS wins, $5 AS losses, $6 as ties, $9 AS awards_number;
+    
+DUMP answer;

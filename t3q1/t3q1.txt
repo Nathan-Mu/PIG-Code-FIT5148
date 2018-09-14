@@ -1,0 +1,16 @@
+tmp_teams = LOAD '/tmp/FIT5148/Teams.csv' using PigStorage(',');
+teams_raw = FILTER tmp_teams BY $0 > 0;
+teams = FOREACH teams_raw GENERATE $2 AS teamID, $9 AS wins, $10 AS losses, $11 AS ties, 
+	$18 AS name;
+--teams
+--0.teamID, 1.wins, 2.losses, 3.ties, 4.name
+
+group_by_teamID = GROUP teams BY (teamID, name);
+count_list = FOREACH group_by_teamID GENERATE FLATTEN(group) AS (teamID, name), 
+	SUM(teams.wins) AS wins, SUM(teams.losses) AS losses, SUM(teams.ties) AS ties;
+--count_list
+--0.teamID, 1.name, 2.wins, 3.losses, 4.ties
+	
+answer = FOREACH count_list GENERATE $1 as name, $2 as wins, $3 as losses, $4 as ties;
+
+DUMP answer;
